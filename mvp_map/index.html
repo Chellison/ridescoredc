@@ -124,6 +124,9 @@
   }
   #settings-panel .close-btn:hover { background: #f1f5f9; color: #1a1a2e; }
 
+  #slider-group {
+    display: none;
+  } 
   /* ── Mode switcher (Ridescore vs Custom) ── */
   .mode-switcher {
     display: flex; border-radius: 6px; overflow: hidden;
@@ -247,8 +250,24 @@
   </div>
 
   <div class="mode-switcher">
-    <button id="mode-ridescore" class="selected" onclick="setMode('ridescore')">Use RideScore</button>
-    <button id="mode-custom" onclick="setMode('custom')">Custom</button>
+    <button id="mode-precomputed" class="selected" onclick="setMode('precomputed')">
+      Existing Methods
+    </button>
+    <button id="mode-custom" onclick="setMode('custom')">
+      Custom
+    </button>
+  </div>
+
+  <!-- Precomputed options -->
+  <div id="precomputed-options" style="margin-bottom:16px;">
+    <div style="display:flex; flex-direction:column; gap:6px;">
+      <button class="ctrl-btn toggle-btn active" id="ridescore1Btn" onclick="setPrecomputed('v1')">
+        RideScore
+      </button>
+      <button class="ctrl-btn toggle-btn" id="ridescore2Btn" onclick="setPrecomputed('v2')">
+        Level of Traffic Stress
+      </button>
+    </div>
   </div>
 
   <div class="ridescore-note" id="ridescore-note">Using the pre-computed safety score. Switch to Custom to tune individual weights.</div>
@@ -304,16 +323,25 @@ function updateLabel(spanId, val) {
   document.getElementById(spanId).textContent = LABELS[val];
 }
 
-/* ── Mode: RideScore vs Custom ── */
-let currentMode = 'ridescore';
+/* ── Mode: Precomputed vs Custom ── */
+let currentMode = 'precomputed';
+let currentPrecomputed = 'v1';
 const sliderIds = ['speedlimit', 'numlanes', 'facility', 'function', 'roadwidth', 'pavement'];
 
 function setMode(mode) {
   currentMode = mode;
-  document.getElementById('mode-ridescore').classList.toggle('selected', mode === 'ridescore');
-  document.getElementById('mode-custom').classList.toggle('selected', mode === 'custom');
-  document.getElementById('ridescore-note').style.display = mode === 'ridescore' ? 'block' : 'none';
+  document.getElementById('mode-precomputed')
+    .classList.toggle('selected', mode === 'precomputed');
+  document.getElementById('mode-custom')
+    .classList.toggle('selected', mode === 'custom');
+  // Show/hide sections
+  document.getElementById('precomputed-options').style.display =
+    mode === 'precomputed' ? 'block' : 'none';
 
+  document.getElementById('slider-group').style.display =
+    mode === 'custom' ? 'flex' : 'none';
+
+  
   sliderIds.forEach(id => {
     const row = document.getElementById('row_' + id);
     const input = document.getElementById('i_' + id);
@@ -364,21 +392,35 @@ const roadwidth_slider = document.getElementById('i_roadwidth');
 const pavement_slider = document.getElementById('i_pavement');
 
 document.getElementById('updateBtn').addEventListener('click', () => {
-  if (currentMode === 'ridescore') {
-    RefreshZone(4, 0, 0, 0, 0, 0, 0);
+  if (currentMode === 'precomputed') {
+    if (currentPrecomputed === 'v1') {
+      RefreshZone(4, 0, 0, 0, 0, 0, 0, 0);
+    } else {
+      RefreshZone(0, 4, 0, 0, 0, 0, 0, 0);
+    }
   } else {
     RefreshZone(
-      0, speedlimit_slider.value, numlanes_slider.value,
+      0, 0, speedlimit_slider.value, numlanes_slider.value,
       facility_slider.value, function_slider.value,
       roadwidth_slider.value, pavement_slider.value
     );
   }
 });
 
-function RefreshZone(i_ridescore, i_speedlimit, i_numlanes, i_facility, i_function, i_roadwidth, i_pavement) {
+function setPrecomputed(version) {
+  currentPrecomputed = version;
+
+  document.getElementById('ridescore1Btn')
+    .classList.toggle('active', version === 'v1');
+
+  document.getElementById('ridescore2Btn')
+    .classList.toggle('active', version === 'v2');
+}
+
+function RefreshZone(i_ridescore,i_lts_original, i_speedlimit, i_numlanes, i_facility, i_function, i_roadwidth, i_pavement) {
   const timestamp = Date.now();
   const source = map.getSource('my-vector-source');
-  source.setTiles([`http://digitalocean_ip:3000/update_score/{z}/{x}/{y}?i_ridescore=${i_ridescore}&i_speedlimit=${i_speedlimit}&i_numlanes=${i_numlanes}&i_facility=${i_facility}&i_function=${i_function}&i_roadwidth=${i_roadwidth}&i_pavement=${i_pavement}&ts=${timestamp}`]);
+  source.setTiles([`http://digitalocean_ip:3000/update_score/{z}/{x}/{y}?i_ridescore=${i_ridescore}&i_lts_original=${i_lts_original}&i_speedlimit=${i_speedlimit}&i_numlanes=${i_numlanes}&i_facility=${i_facility}&i_function=${i_function}&i_roadwidth=${i_roadwidth}&i_pavement=${i_pavement}&ts=${timestamp}`]);
   console.log('Refreshed');
 }
 
@@ -404,7 +446,7 @@ map.on('style.load', () => {
 
   map.addSource('my-vector-source', {
     type: 'vector',
-    tiles: ["http://digitalocean_ip:3000/update_score/{z}/{x}/{y}?i_ridescore=4&i_speedlimit=0&i_numlanes=0&i_facility=0&i_function=0&i_roadwidth=0&i_pavement=0"],
+    tiles: ["http://digitalocean_ip:3000/update_score/{z}/{x}/{y}?i_ridescore=4&i_lts_original=0&i_speedlimit=0&i_numlanes=0&i_facility=0&i_function=0&i_roadwidth=0&i_pavement=0"],
     minzoom: 1, maxzoom: 14
   });
   map.addLayer({
@@ -521,7 +563,7 @@ map.on('style.load', () => {
         <table style="margin-top:6px;font-size:11px;border-collapse:collapse;width:100%">
           <tr><td style="color:#64748b;padding:2px 8px 2px 0">Safety Score</td><td><strong>${p.user_score}</strong></td></tr>
           <tr><td style="color:#64748b;padding:2px 8px 2px 0">RideScore</td><td>${p.ridescore_v1}</td></tr>
-          <tr><td style="color:#64748b;padding:2px 8px 2px 0">LTS</td><td>${p.lts_level}</td></tr>
+          <tr><td style="color:#64748b;padding:2px 8px 2px 0">LTS</td><td>${p.original_lts}</td></tr>
           <tr><td style="color:#64748b;padding:2px 8px 2px 0">Bike Lane</td><td>${p.bike_facility_type}</td></tr>
           <tr><td style="color:#64748b;padding:2px 8px 2px 0">Crashes (5yr)</td><td>${p.crash_count_5yr}</td></tr>
           <tr><td style="color:#64748b;padding:2px 8px 2px 0">Speed Limit</td><td>${p.speed_limit_raw} mph</td></tr>
